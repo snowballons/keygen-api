@@ -1,76 +1,40 @@
-# syntax=docker/dockerfile:1
+services:
+  - type: web
+    name: keygen-api
+    env: docker
+    repo: https://github.com/snowballons/keygen-api.git
+    branch: main
+    docker:
+      dockerfilePath: ./Dockerfile
+    preDeployCommand: rails db:migrate
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: keygen-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: keygen-cache
+          property: connectionString
+      - key: KEYGEN_MODE
+        value: singleplayer
+      - key: KEYGEN_HOST
+        value: https://keygen-api.onrender.com
+      - key: PORT
+        value: 3000
+      - key: RAILS_ENV
+        value: production
 
-# Base image
-FROM ruby:3.3.8-alpine AS base
+  - type: database
+    name: keygen-db
+    databaseType: postgresql
+    plan: starter
+    ipAllowList: [] # Allow external access if needed
+    region: oregon
+    postgresVersion: 15
 
-ENV BUNDLE_WITHOUT="development:test" \
-    BUNDLE_PATH="/usr/local/bundle" \
-    BUNDLE_DEPLOYMENT="1" \
-    RAILS_ENV="production"
-
-# Build stage
-FROM base AS build
-
-WORKDIR /app
-COPY ./Gemfile /app/Gemfile
-COPY ./Gemfile.lock /app/Gemfile.lock
-
-RUN apk add --no-cache \
-  git \
-  bash \
-  build-base \
-  libxml2-dev \
-  libxslt-dev \
-  yaml-dev \
-  tzdata \
-  openssl \
-  postgresql-dev \
-  libc6-compat \
-  libstdc++ && \
-  bundle config --global without "${BUNDLE_WITHOUT}"  && \
-  bundle config --global path "${BUNDLE_PATH}" && \
-  bundle config --global deployment "${BUNDLE_DEPLOYMENT}" && \
-  bundle config --global retry 5 && \
-  bundle install && \
-  find /usr/local/bundle/ \
-    \( \
-      -name "*.c" -o \
-      -name "*.o" -o \
-      -name "*.a" -o \
-      -name "*.h" -o \
-      -name "Makefile" -o \
-      -name "*.md" \
-    \) -delete && \
-  chmod -R a+r "${BUNDLE_PATH}"
-
-# Final stage
-FROM base
-LABEL maintainer="keygen.sh <oss@keygen.sh>"
-
-RUN apk add --no-cache \
-  bash \
-  postgresql-client \
-  tzdata \
-  libc6-compat \
-  libstdc++ && \
-  adduser -h /app -g keygen -u 1000 -s /bin/bash -D keygen
-
-COPY --from=build --chown=keygen:keygen \
-  /usr/local/bundle/ /usr/local/bundle
-
-WORKDIR /app
-COPY . /app
-
-RUN chmod +x /app/scripts/entrypoint.sh && \
-  chown -R keygen:keygen /app
-
-ENV KEYGEN_EDITION="CE" \
-    KEYGEN_MODE="singleplayer" \
-    RAILS_LOG_TO_STDOUT="1" \
-    PORT="3000" \
-    BIND="0.0.0.0"
-
-USER keygen
-
-ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["web"]
+  - type: redis
+    name: keygen-cache
+    plan: free
+    region: oregon
