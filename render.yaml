@@ -21,12 +21,19 @@ services:
         value: singleplayer
       - key: KEYGEN_HOST
         value: https://keygen-api.onrender.com
+      - key: PORT
+        value: 3000
+      - key: RAILS_ENV
+        value: production
 
-  - type: pgsql
+  - type: psql
     name: keygen-db
     plan: starter
     ipAllowList: [] # Allow external access if needed
+    region: oregon
+    postgresVersion: 15
 
   - type: redis
     name: keygen-cache
     plan: free
+    region: oregon
