@@ -26,10 +26,11 @@ services:
       - key: RAILS_ENV
         value: production
 
-  - type: psql
+  - type: database
     name: keygen-db
+    databaseType: postgresql
     plan: starter
-    ipAllowList: [] # Allow external access if needed
+    ipAllowList: []
     region: oregon
     postgresVersion: 15
 
