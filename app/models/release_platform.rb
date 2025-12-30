@@ -19,7 +19,18 @@ class ReleasePlatform < ApplicationRecord
 
   validates :key,
     presence: true,
-    uniqueness: { message: 'already exists', scope: :account_id }
+    uniqueness: { message: 'already exists', scope: :account_id },
+    length: { maximum: 255 }
+
+  validates :name,
+    length: { maximum: 255 }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
 
   before_create -> { self.key = key&.downcase&.strip }
 

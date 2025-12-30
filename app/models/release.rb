@@ -101,7 +101,7 @@ class Release < ApplicationRecord
   has_environment default: -> { product&.environment_id }
   has_account default: -> { product&.account_id }, inverse_of: :releases
 
-  accepts_nested_attributes_for :constraints, limit: 20, reject_if: :reject_associated_records_for_constraints
+  accepts_nested_attributes_for :constraints, limit: 20
   tracks_nested_attributes_for :constraints
 
   accepts_nested_attributes_for :channel
@@ -155,10 +155,24 @@ class Release < ApplicationRecord
 
   validates :tag,
     exclusion: { in: EXCLUDED_ALIASES, message: "is reserved" },
+    length: { maximum: 255 },
     uniqueness: {
       scope: %i[tag release_package_id product_id account_id],
       message: 'tag already exists',
       if: :tag?,
+    }
+
+  validates :name,
+    length: { maximum: 255 }
+
+  validates :description,
+    length: { maximum: 16.kilobytes }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
     }
 
   validate on: %i[create update] do
@@ -505,7 +519,7 @@ class Release < ApplicationRecord
   scope :with_artifacts, -> { where.associated(:artifacts) }
   scope :without_artifacts, -> { where.missing(:artifacts) }
 
-  scope :with_statuses, -> *statuses { where(status: statuses.flatten.map { _1.to_s.upcase }) }
+  scope :with_statuses, -> *statuses { where(status: statuses.flatten.map { it.to_s.upcase }) }
   scope :with_status,   -> status { where(status: status.to_s.upcase) }
   scope :with_version, -> version { where(version:) }
 
@@ -769,11 +783,11 @@ class Release < ApplicationRecord
         if pre.present?
           pre_tags = pre.scan(SEMVER_TAG_RE)
 
-          if pre_word = pre_tags.map { _1[1] }.compact.join('.').presence
+          if pre_word = pre_tags.map { it[1] }.compact.join('.').presence
             scope = scope.where(semver_pre_word: pre_word)
           end
 
-          if pre_num = pre_tags.map { _1[0] }.compact.first.presence
+          if pre_num = pre_tags.map { it[0] }.compact.first.presence
             scope = scope.where(semver_pre_num: pre_num)
           end
         end
@@ -782,11 +796,11 @@ class Release < ApplicationRecord
         if build.present?
           build_tags = build.scan(SEMVER_TAG_RE)
 
-          if build_word = build_tags.map { _1[1] }.compact.join('.').presence
+          if build_word = build_tags.map { it[1] }.compact.join('.').presence
             scope = scope.where(semver_build_word: build_word)
           end
 
-          if build_num = build_tags.map { _1[0] }.compact.first.presence
+          if build_num = build_tags.map { it[0] }.compact.first.presence
             scope = scope.where(semver_build_num: build_num)
           end
         end
@@ -903,16 +917,6 @@ class Release < ApplicationRecord
     self.channel = rows.first
   end
 
-  def reject_associated_records_for_constraints(attrs)
-    return if
-      new_record?
-
-    constraints.exists?(
-      # Make sure we only select real columns, not e.g. _destroy.
-      attrs.slice(attributes.keys),
-    )
-  end
-
   def enforce_release_limit_on_account!
     return unless account.trialing_or_free?
 
@@ -943,13 +947,13 @@ class Release < ApplicationRecord
       pre_tags = v.pre_release.scan(SEMVER_TAG_RE)
 
       # Collect non-nil pre words and rejoin with delimiter
-      self.semver_pre_word = pre_tags.map { _1[1] }
+      self.semver_pre_word = pre_tags.map { it[1] }
                                      .compact
                                      .join('.')
                                      .presence
 
       # Collect first numeric pre tag
-      self.semver_pre_num  = pre_tags.map { _1[0] }
+      self.semver_pre_num  = pre_tags.map { it[0] }
                                      .compact
                                      .first
                                      .presence
@@ -959,13 +963,13 @@ class Release < ApplicationRecord
       build_tags = v.build.scan(SEMVER_TAG_RE)
 
       # Collect non-nil build words and rejoin with delimiter
-      self.semver_build_word = build_tags.map { _1[1] }
+      self.semver_build_word = build_tags.map { it[1] }
                                          .compact
                                          .join('.')
                                          .presence
 
       # Collect first numeric build tag
-      self.semver_build_num  = build_tags.map { _1[0] }
+      self.semver_build_num  = build_tags.map { it[0] }
                                          .compact
                                          .first
                                          .presence

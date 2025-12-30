@@ -9,7 +9,7 @@ module Keygen
 
       extend self
 
-      def redirect_url(account:, environment:, callback_url:, email: nil, expires_in: 5.minutes)
+      def redirect_url(account:, callback_url:, environment: nil, email: nil, expires_in: 5.minutes)
         WorkOS::SSO.authorization_url(
           client_id: WORKOS_CLIENT_ID,
           organization: account.sso_organization_id,
@@ -33,7 +33,7 @@ module Keygen
 
         res.profile
       rescue WorkOS::APIError => e
-        raise Keygen::Error::InvalidSingleSignOnError.new(e.message, code: "SSO_#{e.error.upcase}")
+        raise Keygen::Error::InvalidSingleSignOnError.new("bad code: #{e.message}", code: "SSO_#{e.error.upcase}")
       end
 
       def decrypt_state(ciphertext, secret_key:)
@@ -41,15 +41,15 @@ module Keygen
 
         crypt = ActiveSupport::MessageEncryptor.new(derive_key(secret_key), serializer: JSON)
         enc   = ciphertext.split('.')
-                          .map { urlsafe64_to_strict64(_1) }
+                          .map { urlsafe64_to_strict64(it) }
                           .join('--')
 
         dec = crypt.decrypt_and_verify(enc)
-        return nil if dec.blank?
+        raise ActiveSupport::MessageEncryptor::InvalidMessage, 'invalid message' if dec.blank?
 
         State.new(**dec.symbolize_keys)
-      rescue ActiveSupport::MessageEncryptor::InvalidMessage
-        nil
+      rescue ActiveSupport::MessageEncryptor::InvalidMessage => e
+        raise Keygen::Error::InvalidSingleSignOnError.new("bad state: #{e.message}", code: 'SSO_STATE_INVALID')
       end
 
       private
@@ -58,7 +58,7 @@ module Keygen
         crypt = ActiveSupport::MessageEncryptor.new(derive_key(secret_key), serializer: JSON)
         enc   = crypt.encrypt_and_sign(state, expires_in:)
                      .split('--')
-                     .map { strict64_to_urlsafe64(_1) }
+                     .map { strict64_to_urlsafe64(it) }
                      .join('.')
 
         enc

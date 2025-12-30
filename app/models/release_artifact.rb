@@ -99,7 +99,8 @@ class ReleaseArtifact < ApplicationRecord
 
   validates :filename,
     presence: true,
-    uniqueness: { message: 'already exists', scope: %i[account_id release_id] }
+    uniqueness: { message: 'already exists', scope: %i[account_id release_id] },
+    length: { maximum: 255 }
 
   validates :filesize,
     allow_blank: true,
@@ -110,6 +111,19 @@ class ReleaseArtifact < ApplicationRecord
     inclusion: {
       message: 'unsupported status',
       in: STATUSES,
+    }
+
+  validates :checksum,
+    length: { maximum: 4.kilobytes }
+
+  validates :signature,
+    length: { maximum: 4.kilobytes }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
     }
 
   scope :order_by_version, -> (order = :desc) {
@@ -386,7 +400,7 @@ class ReleaseArtifact < ApplicationRecord
   scope :open,     -> { joins(release: :product).where(product: { distribution_strategy: 'OPEN' }) }
   scope :closed,   -> { joins(release: :product).where(product: { distribution_strategy: 'CLOSED' }) }
 
-  scope :with_statuses, -> *statuses { where(status: statuses.flatten.map { _1.to_s.upcase }) }
+  scope :with_statuses, -> *statuses { where(status: statuses.flatten.map { it.to_s.upcase }) }
   scope :with_status,   -> status { where(status: status.to_s.upcase) }
   scope :with_checksum, -> checksum { where(checksum:) }
 

@@ -3857,6 +3857,37 @@ Feature: Create policy
     And sidekiq should have 1 "metric" job
     And sidekiq should have 1 "request-log" job
 
+  Scenario: Admin creates a policy using scheme ED25519_SIGN for their account
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 2 "webhook-endpoints"
+    And the current account has 1 "product"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/policies" with the following:
+      """
+      {
+        "data": {
+          "type": "policies",
+          "attributes": { "name": "ECDSA", "scheme": "ECDSA_P256_SIGN" },
+          "relationships": {
+            "product": {
+              "data": {
+                "type": "products",
+                "id": "$products[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "policy" with the scheme "ECDSA_P256_SIGN"
+    And the response body should be a "policy" that is not encrypted
+    And the response body should be a "policy" with the name "ECDSA"
+    And sidekiq should have 2 "webhook" jobs
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
   Scenario: Admin creates a legacy encrypted policy without a scheme for their account
     Given I am an admin of account "test1"
     And the current account is "test1"
@@ -4007,7 +4038,7 @@ Feature: Create policy
       """
       {
         "title": "Unprocessable resource",
-        "detail": "unsupported encryption scheme",
+        "detail": "unsupported signing scheme",
         "source": {
           "pointer": "/data/attributes/scheme"
         },
@@ -4210,7 +4241,7 @@ Feature: Create policy
         "data": {
           "type": "policies",
           "attributes": {
-            "name": "Long Heartbeat Policy",
+            "name": "Core-metered Policy",
             "maxCores": 32
           },
           "relationships": {
@@ -4225,7 +4256,7 @@ Feature: Create policy
       }
       """
     Then the response status should be "201"
-    And the response body should be a "policy" with the name "Long Heartbeat Policy"
+    And the response body should be a "policy" with the name "Core-metered Policy"
     And the response body should be a "policy" with the maxCores "32"
     And sidekiq should have 2 "webhook" jobs
     And sidekiq should have 1 "metric" job
@@ -4247,7 +4278,7 @@ Feature: Create policy
         "data": {
           "type": "policies",
           "attributes": {
-            "name": "Normal Heartbeat Policy",
+            "name": "Core-metered Policy",
             "maxCores": 0
           },
           "relationships": {
@@ -4270,6 +4301,172 @@ Feature: Create policy
         "code": "MAX_CORES_INVALID",
         "source": {
           "pointer": "/data/attributes/maxCores"
+        }
+      }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 0 "metric" jobs
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a policy that has a memory limit
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the account "test1" has the following attributes:
+      """
+      { "protected": true }
+      """
+    And the current account has 2 "webhook-endpoints"
+    And the current account has 1 "product"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/policies" with the following:
+      """
+      {
+        "data": {
+          "type": "policies",
+          "attributes": {
+            "name": "Memory-metered Policy",
+            "maxMemory": 34359738368
+          },
+          "relationships": {
+            "product": {
+              "data": {
+                "type": "products",
+                "id": "$products[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "policy" with the name "Memory-metered Policy"
+    And the response body should be a "policy" with the maxMemory "34359738368"
+    And sidekiq should have 2 "webhook" jobs
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a policy that has an invalid max memory
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the account "test1" has the following attributes:
+      """
+      { "protected": true }
+      """
+    And the current account has 2 "webhook-endpoints"
+    And the current account has 1 "product"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/policies" with the following:
+      """
+      {
+        "data": {
+          "type": "policies",
+          "attributes": {
+            "name": "Memory-metered Policy",
+            "maxMemory": 0
+          },
+          "relationships": {
+            "product": {
+              "data": {
+                "type": "products",
+                "id": "$products[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "422"
+    And the first error should have the following properties:
+      """
+      {
+        "title": "Unprocessable resource",
+        "detail": "must be greater than or equal to 1",
+        "code": "MAX_MEMORY_INVALID",
+        "source": {
+          "pointer": "/data/attributes/maxMemory"
+        }
+      }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 0 "metric" jobs
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a policy that has a disk limit
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the account "test1" has the following attributes:
+      """
+      { "protected": true }
+      """
+    And the current account has 2 "webhook-endpoints"
+    And the current account has 1 "product"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/policies" with the following:
+      """
+      {
+        "data": {
+          "type": "policies",
+          "attributes": {
+            "name": "Disk-metered Policy",
+            "maxDisk": 1099511627776
+          },
+          "relationships": {
+            "product": {
+              "data": {
+                "type": "products",
+                "id": "$products[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "policy" with the name "Disk-metered Policy"
+    And the response body should be a "policy" with the maxDisk "1099511627776"
+    And sidekiq should have 2 "webhook" jobs
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a policy that has an invalid max disk
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the account "test1" has the following attributes:
+      """
+      { "protected": true }
+      """
+    And the current account has 2 "webhook-endpoints"
+    And the current account has 1 "product"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/policies" with the following:
+      """
+      {
+        "data": {
+          "type": "policies",
+          "attributes": {
+            "name": "Disk-metered Policy",
+            "maxDisk": 0
+          },
+          "relationships": {
+            "product": {
+              "data": {
+                "type": "products",
+                "id": "$products[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "422"
+    And the first error should have the following properties:
+      """
+      {
+        "title": "Unprocessable resource",
+        "detail": "must be greater than or equal to 1",
+        "code": "MAX_DISK_INVALID",
+        "source": {
+          "pointer": "/data/attributes/maxDisk"
         }
       }
       """

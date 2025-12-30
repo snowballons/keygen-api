@@ -15,7 +15,7 @@ module Api::V1::ReleaseEngines
 
       # for etag support
       return unless
-        stale?(packages, cache_control: { max_age: 1.day, private: true })
+        stale?(packages, cache_control: { max_age: 10.minutes, private: true })
 
       render 'api/v1/release_engines/pypi/simple/index',
         layout: 'layouts/simple',
@@ -35,7 +35,7 @@ module Api::V1::ReleaseEngines
       # FIXME(ezekg) https://github.com/brianhempel/active_record_union/issues/35
       last_modified = artifacts.collect(&:updated_at).max
       return unless
-        stale?(etag: artifacts, last_modified:, cache_control: { max_age: 1.day, private: true })
+        stale?(etag: artifacts, last_modified:, cache_control: { max_age: 10.minutes, private: true })
 
       render 'api/v1/release_engines/pypi/simple/show',
         layout: 'layouts/simple',
@@ -44,6 +44,14 @@ module Api::V1::ReleaseEngines
           package:,
           artifacts:,
         }
+    rescue ActionPolicy::Unauthorized
+      # FIXME(ezekg) Although we leak information here, we improve DX by letting pip prompt
+      #              the end-user for authentication when the package requires it.
+      if current_bearer.nil?
+        render_unauthorized
+      else
+        raise
+      end
     end
 
     private
@@ -51,8 +59,10 @@ module Api::V1::ReleaseEngines
     attr_reader :package
 
     def set_package
+      scoped_packages = authorized_scope(current_account.release_packages.pypi, with: ReleaseEngines::Pypi::ReleasePackagePolicy) # see below comment
+
       @package = Current.resource = FindByAliasService.call(
-        authorized_scope(current_account.release_packages.pypi),
+        scoped_packages,
         id: params[:package],
         aliases: :key,
       )

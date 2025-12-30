@@ -50,10 +50,16 @@ class Product < ApplicationRecord
     allow_blank: false,
     allow_nil: true
 
-  validates :name, presence: true
-  validates :url, url: { protocols: %w[https http] }, allow_nil: true
-  validates :metadata, length: { maximum: 64, message: "too many keys (exceeded limit of 64 keys)" }
+  validates :name, presence: true, length: { maximum: 255 }
+  validates :url, url: { protocols: %w[https http] }, length: { maximum: 255 }, allow_nil: true
   validates :distribution_strategy, inclusion: { in: DISTRIBUTION_STRATEGIES, message: "unsupported distribution strategy" }, allow_nil: true
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
 
   scope :search_id, -> (term) {
     identifier = term.to_s

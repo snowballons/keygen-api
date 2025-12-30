@@ -13,59 +13,91 @@ class PruneRequestLogsWorker < BaseWorker
     return if
       BACKLOG_DAYS <= 0 # never prune -- keep request backlog forever
 
-    cutoff_date = BACKLOG_DAYS.days.ago.to_date
-    start_time  = Time.parse(ts)
+    @cutoff_end_date   = BACKLOG_DAYS.days.ago.to_date
+    @cutoff_start_date = RequestLog.unordered.where(created_date: ..cutoff_end_date).minimum(:created_date) || cutoff_end_date
+    @start_time        = Time.parse(ts)
 
-    accounts = Account.where_assoc_exists(:request_logs,
-      created_date: ...cutoff_date,
-    )
+    Keygen.logger.info "[workers.prune-request-logs] Starting: start=#{start_time} cutoff_start=#{cutoff_start_date} cutoff_end=#{cutoff_end_date}"
 
-    Keygen.logger.info "[workers.prune-request-logs] Starting: accounts=#{accounts.count} start=#{start_time} cutoff=#{cutoff_date}"
+    catch :pause do
+      (cutoff_start_date...cutoff_end_date).each do |date|
+        accounts = Account.preload(:plan).where_assoc_exists(:request_logs,
+          created_date: date,
+        )
 
-    accounts.find_each do |account|
-      account_id   = account.id
-      request_logs = account.request_logs.where(created_date: ...cutoff_date)
-      plan         = account.plan
+        Keygen.logger.info "[workers.prune-request-logs] Pruning day: accounts=#{accounts.count} date=#{date}"
 
-      total = request_logs.count
-      sum   = 0
-
-      batches = (total / BATCH_SIZE) + 1
-      batch   = 0
-
-      Keygen.logger.info "[workers.prune-request-logs] Pruning #{total} rows: account_id=#{account_id} batches=#{batches}"
-
-      loop do
-        unless (t = Time.current).before?(start_time + EXEC_TIMEOUT.seconds)
-          Keygen.logger.info "[workers.prune-request-logs] Pausing: start=#{start_time} end=#{t}"
-
-          return # we'll pick up on the next cron
+        accounts.unordered.find_each do |account|
+          prune_request_logs_for_date(account, date:)
         end
 
-        count = request_logs.statement_timeout(STATEMENT_TIMEOUT) do
-          prune = account.request_logs.where(id: request_logs.limit(BATCH_SIZE).reorder(nil).ids)
-
-          # apply the account's log retention policy if there is one
-          if plan.ent? && plan.request_log_retention_duration?
-            retention_cutoff_date = plan.request_log_retention_duration.seconds.ago.to_date
-
-            prune = prune.where(created_date: ...retention_cutoff_date)
-          end
-
-          prune.delete_all
-        end
-
-        sum   += count
-        batch += 1
-
-        Keygen.logger.info "[workers.prune-request-logs] Pruned #{sum}/#{total} rows: account_id=#{account_id} batch=#{batch}/#{batches}"
-
-        sleep BATCH_WAIT
-
-        break if count < BATCH_SIZE
+        Keygen.logger.info "[workers.prune-request-logs] Pruned day: date=#{date}"
       end
     end
 
     Keygen.logger.info "[workers.prune-request-logs] Done"
+  end
+
+  private
+
+  attr_reader :cutoff_start_date,
+              :cutoff_end_date,
+              :start_time
+
+  def prune_request_logs_for_date(account, date:)
+    return if
+      within_retention_period?(account, date:)
+
+    request_logs = account.request_logs.unordered.where(created_date: date)
+
+    total = request_logs.count
+    sum   = 0
+
+    batches = (total / BATCH_SIZE) + 1
+    batch   = 0
+
+    Keygen.logger.info "[workers.prune-request-logs] Pruning #{total} rows: account_id=#{account.id} date=#{date}"
+
+    loop do
+      unless within_execution_timeout?
+        Keygen.logger.info "[workers.prune-request-logs] Pausing: date=#{date} start=#{start_time} end=#{current_time}"
+
+        throw :pause
+      end
+
+      count = request_logs.statement_timeout(STATEMENT_TIMEOUT) do
+        request_logs.limit(BATCH_SIZE).delete_all
+      end
+
+      sum   += count
+      batch += 1
+
+      Keygen.logger.info "[workers.prune-request-logs] Pruned #{count} rows: account_id=#{account.id} date=#{date} batch=#{batch}/#{batches} count=#{sum}/#{total}"
+
+      sleep BATCH_WAIT
+
+      break if count < BATCH_SIZE
+    end
+
+    Keygen.logger.info "[workers.prune-request-logs] Pruning done: account_id=#{account.id} date=#{date} count=#{sum}/#{total}"
+  end
+
+  def current_time = Time.current
+
+  def within_execution_timeout?
+    current_time.before?(start_time + EXEC_TIMEOUT.seconds)
+  end
+
+  def within_retention_period?(account, date:)
+    plan = account.plan
+
+    return false unless
+      plan.present? && plan.request_log_retention_duration?
+
+    cutoff_date = plan.request_log_retention_duration.seconds
+                                                     .ago
+                                                     .to_date
+
+    date >= cutoff_date
   end
 end

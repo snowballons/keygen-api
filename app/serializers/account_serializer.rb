@@ -15,7 +15,7 @@ class AccountSerializer < BaseSerializer
     @object.updated_at
   end
 
-  if Keygen.multiplayer?
+  if Keygen.cloud?
     relationship :billing, unless: -> { @object.billing.nil? } do
       linkage always: true do
         { type: :billings, id: @object.billing&.id }
@@ -37,7 +37,7 @@ class AccountSerializer < BaseSerializer
 
   relationship :settings do
     link :related do
-      @url_helpers.v1_account_settings_path @object
+      @url_helpers.v1_account_account_settings_path @object
     end
   end
 
@@ -129,16 +129,18 @@ class AccountSerializer < BaseSerializer
   meta do
     ed25519_key = Base64.strict_encode64(@object.ed25519_public_key)
     rsa2048_key = Base64.strict_encode64(@object.public_key)
+    ecdsa_key   = Base64.strict_encode64(@object.ecdsa_public_key)
 
     meta = {
       public_key: rsa2048_key,
       keys: {
         ed25519: ed25519_key,
         rsa2048: rsa2048_key,
+        ecdsa: ecdsa_key,
       }
     }
 
-    if Keygen.multiplayer? && @object.slack_accepted_at?
+    if Keygen.cloud? && @object.slack_accepted_at?
       meta = {
         slack_deeplink: "https://slack.com/app_redirect?channel=#{@object.slack_channel_id}&team=#{@object.slack_team_id}",
         **meta,
@@ -146,6 +148,6 @@ class AccountSerializer < BaseSerializer
     end
 
     # FIXME(ezekg) base serializer should handle this
-    meta.transform_keys { _1.to_s.camelize(:lower) }
+    meta.transform_keys { it.to_s.camelize(:lower) }
   end
 end

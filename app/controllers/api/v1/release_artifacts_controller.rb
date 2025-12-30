@@ -77,7 +77,7 @@ module Api::V1
           }
           param :signature, type: :string, allow_blank: true, allow_nil: true, optional: true
           param :checksum, type: :string, allow_blank: true, allow_nil: true, optional: true
-          param :metadata, type: :metadata, allow_blank: true, optional: true
+          param :metadata, type: :hash, depth: { maximum: 2 }, allow_blank: true, optional: true
         end
         param :relationships, type: :hash do
           param :release, type: :hash do
@@ -116,7 +116,7 @@ module Api::V1
       )
 
       # Respond without a redirect if that's what the client prefers
-      render jsonapi: artifact, location: upload.url if
+      return render jsonapi: artifact, location: upload.url if
         prefers?('no-redirect')
 
       render jsonapi: artifact, status: :temporary_redirect, location: upload.url
@@ -132,7 +132,7 @@ module Api::V1
           param :filesize, type: :integer, allow_nil: true, optional: true
           param :signature, type: :string, allow_blank: true, allow_nil: true, optional: true
           param :checksum, type: :string, allow_blank: true, allow_nil: true, optional: true
-          param :metadata, type: :metadata, allow_blank: true, optional: true
+          param :metadata, type: :hash, depth: { maximum: 2 }, allow_blank: true, optional: true
         end
       end
     }

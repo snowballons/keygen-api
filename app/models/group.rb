@@ -23,6 +23,16 @@ class Group < ApplicationRecord
   has_environment
   has_account
 
+  validates :name,
+    length: { minimum: 1, maximum: 255 }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
+
   # Give products the ability to read all groups
   scope :for_product, -> id { self }
 

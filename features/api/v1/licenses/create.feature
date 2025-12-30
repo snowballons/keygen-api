@@ -2238,7 +2238,7 @@ Feature: Create license
     And sidekiq should have 1 "metric" job
     And sidekiq should have 1 "request-log" job
 
-  Scenario: Admin creates a license with complex metadata
+  Scenario: Admin creates a license with nested metadata
     Given I am an admin of account "test1"
     And the current account is "test1"
     And the current account has 1 "webhook-endpoint"
@@ -2314,7 +2314,65 @@ Feature: Create license
                 "key": { "k": "v" }
               },
               "array": [
-                [1, 2, 3]
+                { "foo": 1 },
+                { "bar": 2 },
+                { "baz": 3 }
+              ]
+            }
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response should contain a valid signature header for "test1"
+    And the response body should be a "license" with the following "metadata":
+      """
+      {
+        "key": ["value"],
+        "object": {
+          "key": { "k": "v" }
+        },
+        "array": [
+          { "foo": 1 },
+          { "bar": 2 },
+          { "baz": 3 }
+        ]
+      }
+      """
+    And the current account should have 1 "license"
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license with too complex nested metadata
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "policies"
+    And the current account has 1 "user"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "metadata": {
+              "key": ["value"],
+              "object": {
+                "key": { "k": "v" }
+              },
+              "array": [
+                [0],
+                [{ "foo": 1 }, 2, [3]]
               ]
             }
           },
@@ -2335,9 +2393,9 @@ Feature: Create license
       """
       {
         "title": "Bad request",
-        "detail": "type mismatch (received object expected metadata object)",
+        "detail": "maximum depth of 2 exceeded",
         "source": {
-          "pointer": "/data/attributes/metadata"
+          "pointer": "/data/attributes/metadata/array/1/0"
         }
       }
       """
@@ -3956,6 +4014,147 @@ Feature: Create license
     And the current account should have 1 "license"
     And the response body should be a "license" with the signed key of "short" using "ED25519_SIGN"
     And the response body should be a "license" with the scheme "ED25519_SIGN"
+    And the response body should be a "license" that is not encrypted
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license using scheme ECDSA_P256_SIGN for a user of their account
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "product"
+    And the current account has 1 "policy"
+    And the first "policy" has the following attributes:
+      """
+      { "productId": "$products[0].id", "scheme": "ECDSA_P256_SIGN" }
+      """
+    And the current account has 1 "user"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the current account should have 1 "license"
+    And the response body should a "license" that contains a valid "ECDSA_P256_SIGN" key with the following dataset:
+      """
+      {
+        "account": { "id": "$accounts[0].id" },
+        "product": { "id": "$products[0].id" },
+        "policy": {
+          "id": "$policies[0].id",
+          "duration": $policies[0].duration
+        },
+        "user": null,
+        "license": {
+          "id": "$licenses[0].id",
+          "created": "$licenses[0].created_at",
+          "expiry": "$licenses[0].expiry"
+        }
+      }
+      """
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license using scheme ECDSA_P256_SIGN with a pre-determined key
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "policies"
+    And the first "policy" has the following attributes:
+      """
+      { "scheme": "ECDSA_P256_SIGN" }
+      """
+    And the current account has 1 "user"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "key": "ecdsa-signed-payload"
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            },
+            "user": {
+              "data": {
+                "type": "users",
+                "id": "$users[1]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the current account should have 1 "license"
+    And the response body should be a "license" with the signed key of "ecdsa-signed-payload" using "ECDSA_P256_SIGN"
+    And the response body should be a "license" with the scheme "ECDSA_P256_SIGN"
+    And the response body should be a "license" that is not encrypted
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license using scheme ECDSA_P256_SIGN with a short key
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "policies"
+    And the first "policy" has the following attributes:
+      """
+      { "scheme": "ECDSA_P256_SIGN" }
+      """
+    And the current account has 1 "user"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "key": "short"
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            },
+            "user": {
+              "data": {
+                "type": "users",
+                "id": "$users[1]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the current account should have 1 "license"
+    And the response body should be a "license" with the signed key of "short" using "ECDSA_P256_SIGN"
+    And the response body should be a "license" with the scheme "ECDSA_P256_SIGN"
     And the response body should be a "license" that is not encrypted
     And sidekiq should have 1 "webhook" job
     And sidekiq should have 1 "metric" job
@@ -6404,11 +6603,11 @@ Feature: Create license
       """
       {
         "title": "Unprocessable resource",
+        "code": "MAX_MACHINES_INVALID",
         "detail": "must be equal to 1 for non-floating policy",
         "source": {
           "pointer": "/data/attributes/maxMachines"
-        },
-        "code": "MAX_MACHINES_INVALID"
+        }
       }
       """
     And sidekiq should have 0 "webhook" jobs
@@ -6569,6 +6768,148 @@ Feature: Create license
     And the current account should have 1 "license"
     And sidekiq should have 1 "webhook" jobs
     And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license with a max memory override
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "policy"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "maxMemory": 131072
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "license" with maxMemory "131072"
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license with an invalid max memory override
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "policy"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "maxMemory": -1
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "422"
+    And the first error should have the following properties:
+      """
+      {
+        "title": "Unprocessable resource",
+        "detail": "must be greater than or equal to 1",
+        "code": "MAX_MEMORY_INVALID",
+        "source": {
+          "pointer": "/data/attributes/maxMemory"
+        }
+      }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 0 "metric" jobs
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license with a max disk override
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "policy"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "maxDisk": 4096000
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "license" with maxDisk "4096000"
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license with an invalid max disk override
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "policy"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "maxDisk": -1
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "422"
+    And the first error should have the following properties:
+      """
+      {
+        "title": "Unprocessable resource",
+        "detail": "must be greater than or equal to 1",
+        "code": "MAX_DISK_INVALID",
+        "source": {
+          "pointer": "/data/attributes/maxDisk"
+        }
+      }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 0 "metric" jobs
     And sidekiq should have 1 "request-log" job
 
   Scenario: Admin creates a license that overrides its policy's max uses
@@ -7026,6 +7367,46 @@ Feature: Create license
         "issued": "$licenses[0].created_at",
         "expires": "$licenses[0].expiry"
       }
+      """
+    And sidekiq should have 1 "webhook" job
+    And sidekiq should have 1 "metric" job
+    And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin creates a license using scheme ECDSA_P256_SIGN using template variables
+    Given I am an admin of account "test1"
+    And the current account is "test1"
+    And the current account has 1 "webhook-endpoint"
+    And the current account has 1 "policies"
+    And the first "policy" has the following attributes:
+      """
+      { "scheme": "ECDSA_P256_SIGN" }
+      """
+    And the current account has 1 "user"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/licenses" with the following:
+      """
+      {
+        "data": {
+          "type": "licenses",
+          "attributes": {
+            "key": "{\"id\":\"{{id}}\",\"alg\":\"nist-p256\",\"iss\":\"{{created}}\",\"exp\":\"{{expiry}}\"}"
+          },
+          "relationships": {
+            "policy": {
+              "data": {
+                "type": "policies",
+                "id": "$policies[0]"
+              }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the current account should have 1 "license"
+    And the response body should a "license" that contains a valid "ECDSA_P256_SIGN" key with the following dataset:
+      """
+      {"id":"$licenses[0].id","alg":"nist-p256","iss":"$licenses[0].created_at","exp":"$licenses[0].expiry"}
       """
     And sidekiq should have 1 "webhook" job
     And sidekiq should have 1 "metric" job

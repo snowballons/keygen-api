@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Base image
-FROM ruby:3.3.8-alpine AS base
+FROM ruby:3.4.7-alpine AS base
 
 ENV BUNDLE_WITHOUT="development:test" \
     BUNDLE_PATH="/usr/local/bundle" \
@@ -26,7 +26,8 @@ RUN apk add --no-cache \
   openssl \
   postgresql-dev \
   libc6-compat \
-  libstdc++ && \
+  libstdc++ \
+  xz-libs && \
   bundle config --global without "${BUNDLE_WITHOUT}"  && \
   bundle config --global path "${BUNDLE_PATH}" && \
   bundle config --global deployment "${BUNDLE_DEPLOYMENT}" && \
@@ -52,6 +53,9 @@ RUN apk add --no-cache \
   postgresql-client \
   tzdata \
   libc6-compat \
+  xz-libs \
+  libxml2 \
+  libxslt \
   libstdc++ && \
   adduser -h /app -g keygen -u 1000 -s /bin/bash -D keygen
 

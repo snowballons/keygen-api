@@ -232,22 +232,32 @@ class License < ApplicationRecord
     end
   end
 
-  validates :metadata, length: { maximum: 64, message: "too many keys (exceeded limit of 64 keys)" }
   validates :uses, numericality: { greater_than_or_equal_to: 0 }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
 
   # Key is immutable so we only need to assert on create
   validates :key,
     exclusion: { in: EXCLUDED_ALIASES, message: "is reserved" },
     uniqueness: { case_sensitive: true, scope: :account_id },
-    length: { minimum: 1, maximum: 100.kilobytes },
+    length: { minimum: 1, maximum: 16.kilobytes },
     unless: -> { key.nil? },
     on: :create
 
   # Non-crypted keys should be 6 character minimum
   validates :key,
-    length: { minimum: 6, maximum: 100.kilobytes },
+    length: { minimum: 6, maximum: 16.kilobytes },
     if: -> { key.present? && !scheme? },
     on: :create
+
+  # NB(ezekg) length limit is larger than other name fields for backwards compat
+  validates :name,
+    length: { maximum: 1.kilobyte }
 
   validates :max_machines,
     numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 2_147_483_647 },
@@ -268,6 +278,16 @@ class License < ApplicationRecord
     numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 2_147_483_647 },
     allow_nil: true,
     if: -> { max_cores_override? }
+
+  validates :max_memory,
+    numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 9_223_372_036_854_775_807 },
+    allow_nil: true,
+    if: -> { max_memory_override? }
+
+  validates :max_disk,
+    numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 9_223_372_036_854_775_807 },
+    allow_nil: true,
+    if: -> { max_disk_override? }
 
   validates :max_uses,
     numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 2_147_483_647 },
@@ -553,11 +573,34 @@ class License < ApplicationRecord
       where 'expiry IS NULL OR expiry < ? OR expiry > ?', Time.current, 3.days.from_now
     end
   }
-  scope :expired, -> (status = true) {
-    if ActiveRecord::Type::Boolean.new.cast(status)
-      where 'expiry IS NOT NULL AND expiry < ?', Time.current
-    else
-      where 'expiry IS NULL OR expiry >= ?', Time.current
+  scope :expired, -> (status = true, within: nil, in: nil, before: nil, after: nil) {
+    within ||= binding.local_variable_get(:in)
+
+    begin
+      case
+      when within.present?
+        s = within.to_s.match?(/\A\d+\z/) ? "PT#{within.to_s}S".upcase : "P#{within.to_s.delete_prefix('P').upcase}"
+        d = ActiveSupport::Duration.parse(s)
+
+        where 'expiry IS NOT NULL AND expiry < ? AND expiry >= ?', Time.current, d.ago
+      when before.present?
+        t = before.to_s.match?(/\A\d+\z/) ? Time.at(before.to_i) : before.to_time
+
+        where 'expiry IS NOT NULL AND expiry < ? AND expiry <= ?', Time.current, t
+      when after.present?
+        t = after.to_s.match?(/\A\d+\z/) ? Time.at(after.to_i) : after.to_time
+
+        where 'expiry IS NOT NULL AND expiry < ? AND expiry >= ?', Time.current, t
+      else
+        if ActiveRecord::Type::Boolean.new.cast(status) # general expired/unexpired scopes
+          where 'expiry IS NOT NULL AND expiry < ?', Time.current
+        else
+          where 'expiry IS NULL OR expiry >= ?', Time.current
+        end
+      end
+    rescue ActiveSupport::Duration::ISO8601Parser::ParsingError,
+           ArgumentError # to_time raises for invalid input
+      none
     end
   }
   scope :expires, -> (within: nil, in: nil, before: nil, after: nil) {
@@ -669,6 +712,11 @@ class License < ApplicationRecord
     to: :policy,
     allow_nil: true
 
+  delegate :max_machines, :max_cores, :max_memory, :max_disk, :max_uses, :max_processes, :max_users,
+    to: :policy,
+    allow_nil: true,
+    prefix: true
+
   # override permissions reader to intersect with owner's permissions
   def permissions
     return Permission.none unless
@@ -755,32 +803,43 @@ class License < ApplicationRecord
     end
   end
 
-
-  def max_machines  = max_machines_override? ? max_machines_override : policy&.max_machines
+  def max_machines  = max_machines_override? ? max_machines_override : policy_max_machines
   def max_machines? = max_machines.present?
   def max_machines=(value)
     self.max_machines_override = value
   end
 
-  def max_cores  = max_cores_override? ? max_cores_override : policy&.max_cores
+  def max_cores  = max_cores_override? ? max_cores_override : policy_max_cores
   def max_cores? = max_cores.present?
   def max_cores=(value)
     self.max_cores_override = value
   end
 
-  def max_uses  = max_uses_override? ? max_uses_override : policy&.max_uses
+  def max_memory  = max_memory_override? ? max_memory_override : policy_max_memory
+  def max_memory? = max_memory.present?
+  def max_memory=(value)
+    self.max_memory_override = value
+  end
+
+  def max_disk  = max_disk_override? ? max_disk_override : policy_max_disk
+  def max_disk? = max_disk.present?
+  def max_disk=(value)
+    self.max_disk_override = value
+  end
+
+  def max_uses  = max_uses_override? ? max_uses_override : policy_max_uses
   def max_uses? = max_uses.present?
   def max_uses=(value)
     self.max_uses_override = value
   end
 
-  def max_processes  = max_processes_override? ? max_processes_override : policy&.max_processes
+  def max_processes  = max_processes_override? ? max_processes_override : policy_max_processes
   def max_processes? = max_processes.present?
   def max_processes=(value)
     self.max_processes_override = value
   end
 
-  def max_users  = max_users_override? ? max_users_override : policy&.max_users
+  def max_users  = max_users_override? ? max_users_override : policy_max_users
   def max_users? = max_users.present?
   def max_users=(value)
     self.max_users_override = value
@@ -1037,6 +1096,8 @@ class License < ApplicationRecord
       generate_pkcs1_pss_signed_key! version: 2
     when "ED25519_SIGN"
       generate_ed25519_signed_key!
+    when "ECDSA_P256_SIGN"
+      generate_ecdsa_p256_signed_key!
     end
 
     raise ActiveRecord::RecordInvalid if key.nil?
@@ -1153,6 +1214,16 @@ class License < ApplicationRecord
     signing_data = "key/#{encoded_license_key}"
     sig = signing_key.sign signing_data
     encoded_sig = Base64.urlsafe_encode64 sig
+
+    self.key = "#{signing_data}.#{encoded_sig}"
+  end
+
+  def generate_ecdsa_p256_signed_key!
+    signing_key = OpenSSL::PKey::EC.new(account.ecdsa_private_key)
+    encoded_license_key = Base64.urlsafe_encode64(seed_key)
+    signing_data = "key/#{encoded_license_key}"
+    sig = signing_key.sign(OpenSSL::Digest::SHA256.new, signing_data)
+    encoded_sig = Base64.urlsafe_encode64(sig)
 
     self.key = "#{signing_data}.#{encoded_sig}"
   end

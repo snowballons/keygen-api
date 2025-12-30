@@ -58,6 +58,13 @@ class ReleasePackage < ApplicationRecord
     allow_blank: false,
     presence: true
 
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
+
   scope :for_product, -> id {
     joins(:product).where(product: { id: })
   }

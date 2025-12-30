@@ -18,7 +18,13 @@ module Api::V1
     }
     has_scope :suspended
     has_scope :expiring
-    has_scope :expired
+    has_scope(:expired, type: :any, only: :index) { |c, s, v|
+      if v in Hash
+        s.expired(**v.symbolize_keys.slice(:within, :in, :before, :after))
+      else
+        s.expired(v)
+      end
+    }
     has_scope :unassigned
     has_scope :assigned
     has_scope :activated
@@ -59,11 +65,13 @@ module Api::V1
             param :suspended, type: :boolean, optional: true
             param :max_machines, type: :integer, allow_nil: true, optional: true
             param :max_cores, type: :integer, allow_nil: true, optional: true
+            param :max_memory, type: :integer, allow_nil: true, optional: true
+            param :max_disk, type: :integer, allow_nil: true, optional: true
             param :max_uses, type: :integer, allow_nil: true, optional: true
             param :max_processes, type: :integer, allow_nil: true, optional: true
             param :max_users, type: :integer, allow_nil: true, optional: true
           end
-          param :metadata, type: :metadata, allow_blank: true, optional: true
+          param :metadata, type: :hash, depth: { maximum: 2 }, allow_blank: true, optional: true
 
           Keygen.ee do |license|
             next unless
@@ -139,10 +147,12 @@ module Api::V1
             param :suspended, type: :boolean, optional: true
             param :max_machines, type: :integer, allow_nil: true, optional: true
             param :max_cores, type: :integer, allow_nil: true, optional: true
+            param :max_memory, type: :integer, allow_nil: true, optional: true
+            param :max_disk, type: :integer, allow_nil: true, optional: true
             param :max_uses, type: :integer, allow_nil: true, optional: true
             param :max_processes, type: :integer, allow_nil: true, optional: true
             param :max_users, type: :integer, allow_nil: true, optional: true
-            param :metadata, type: :metadata, allow_blank: true, optional: true
+            param :metadata, type: :hash, depth: { maximum: 2 }, allow_blank: true, optional: true
           end
 
           Keygen.ee do |license|

@@ -32,10 +32,19 @@ class MachineComponent < ApplicationRecord
   validates :fingerprint,
     uniqueness: { message: 'has already been taken', scope: %i[machine_id] },
     exclusion: { in: EXCLUDED_ALIASES, message: 'is reserved' },
+    length: { maximum: 4.kilobytes },
     presence: true
 
   validates :name,
+    length: { maximum: 255 },
     presence: true
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
 
   # Fingerprint uniqueness on create
   validate on: :create do |component|
@@ -46,7 +55,7 @@ class MachineComponent < ApplicationRecord
     # association params, so this adds better error messaging vs a plain
     # 409 Conflict error via the unique index violation.
     if !machine.persisted? && machine.components_attributes_assigned?
-      count = machine.components.count { _1.fingerprint == component.fingerprint }
+      count = machine.components.count { it.fingerprint == component.fingerprint }
 
       component.errors.add(:fingerprint, :conflict, message: 'is duplicated') if
         count > 1

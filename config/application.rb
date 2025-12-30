@@ -20,7 +20,7 @@ Bundler.require *Rails.groups
 
 module Keygen
   class Application < Rails::Application
-    config.load_defaults 7.2
+    config.load_defaults 8.0
 
     config.generators do |generator|
       # Use UUIDs for table primary keys
@@ -134,7 +134,7 @@ module Keygen
     config.action_dispatch.trusted_proxies =
       ActionDispatch::RemoteIp::TRUSTED_PROXIES + ENV.fetch('TRUSTED_PROXIES') { '' }
                                                      .split(',')
-                                                     .map { IPAddr.new(_1.strip) }
+                                                     .map { IPAddr.new(it.strip) }
 
     # Use mailers queue
     config.action_mailer.deliver_later_queue_name = :mailers
@@ -143,7 +143,7 @@ module Keygen
     config.active_job.queue_adapter = :sidekiq
 
     # Raise on unsafe redirects
-    config.action_controller.raise_on_open_redirects = true
+    config.action_controller.action_on_open_redirect = :raise
 
     # Include all helpers
     config.action_controller.include_all_helpers = true

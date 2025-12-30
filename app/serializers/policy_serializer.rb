@@ -12,6 +12,8 @@ class PolicySerializer < BaseSerializer
   attribute :max_processes
   attribute :max_users
   attribute :max_cores
+  attribute :max_memory
+  attribute :max_disk
   attribute :max_uses
   attribute :machine_uniqueness_strategy
   attribute :machine_matching_strategy
@@ -45,7 +47,7 @@ class PolicySerializer < BaseSerializer
   attribute :heartbeat_basis
   attribute :require_heartbeat
   attribute :metadata do
-    @object.metadata&.deep_transform_keys { _1.to_s.camelize :lower } or {}
+    @object.metadata&.deep_transform_keys { it.to_s.camelize :lower } or {}
   end
   attribute :created do
     @object.created_at

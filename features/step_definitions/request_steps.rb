@@ -3,7 +3,7 @@
 World Rack::Test::Methods
 
 Before do
-  algorithms = %w[ed25519 rsa-pss-sha256 rsa-sha256]
+  algorithms = %w[ed25519 rsa-pss-sha256 rsa-sha256 ecdsa-p256]
 
   # Random accept signature
   header 'Keygen-Accept-Signature', %(algorithm="#{algorithms.sample}") if
@@ -282,7 +282,7 @@ end
 
 Then /^the response body should (?:contain|be) an array (?:with|of) (\d+) "([^\"]*)"$/ do |count, resource|
   json    = JSON.parse last_response.body
-  matches = json['data'].select { _1['type'] == resource.pluralize }
+  matches = json['data'].select { it['type'] == resource.pluralize }
 
   expect(matches.size).to eq count.to_i
 
@@ -507,6 +507,22 @@ Then /^the response body should (?:contain|be) an? "([^\"]*)" with (?:the|an?) (
     expect(signing_prefix).to eq 'key'
     expect(key).to eq val
     expect(ok).to be true
+  when 'ECDSA_P256_SIGN'
+    ec     = OpenSSL::PKey::EC.new(@account.ecdsa_public_key)
+    digest = OpenSSL::Digest::SHA256.new
+
+    data, encoded_sig   = json['data']['attributes']['key'].to_s.split "."
+    prefix, encoded_key = data.split('/')
+    key = Base64.urlsafe_decode64(encoded_key)
+    sig = Base64.urlsafe_decode64(encoded_sig)
+    val = value.to_s
+
+    ok = ec.verify(digest, sig, "key/#{encoded_key}") rescue false
+
+    expect(json['data']['type']).to eq resource.pluralize
+    expect(prefix).to eq 'key'
+    expect(key).to eq val
+    expect(ok).to be true
   else
     raise "unknown encryption scheme"
   end
@@ -711,6 +727,21 @@ Then /^the response body should a "license" that contains a valid "([^\"]*)" key
     ok = verify_key.verify(sig, signing_data)
 
     expect(ok).to be true
+  when 'ECDSA_P256_SIGN'
+    ec     = OpenSSL::PKey::EC.new(@account.ecdsa_public_key)
+    digest = OpenSSL::Digest::SHA256.new
+
+    signing_data, encoded_sig = encoded_key.split(".")
+    prefix, encoded_dataset   = signing_data.split("/")
+    dataset = JSON.parse(Base64.urlsafe_decode64(encoded_dataset))
+
+    expect(dataset).to include expected_dataset
+    expect(prefix).to eq 'key'
+
+    sig = Base64.urlsafe_decode64 encoded_sig
+    ok  = ec.verify(digest, sig, "key/#{encoded_dataset}") rescue false
+
+    expect(ok).to be true
   else
     raise "unknown encryption scheme"
   end
@@ -841,6 +872,16 @@ Then /^the response(?: headers)? should contain the following(?: headers)?:$/ do
   end
 end
 
+Then /^the response(?: headers)? should not contain the following(?: headers)?:$/ do |body|
+  body    = parse_placeholders(body, account: @account, bearer: @bearer, crypt: @crypt)
+  headers = JSON.parse(body)
+
+  headers.each do |key, value|
+    expect(last_response.headers[key]).to_not eq value&.strip
+  end
+end
+
+
 Then /^the response should contain the following raw headers:$/ do |body|
   body    = parse_placeholders(body, account: @account, bearer: @bearer, crypt: @crypt)
   headers = body.split(/\n/)
@@ -927,7 +968,7 @@ Then /^the response should contain a valid(?: "([^\"]+)")? signature header for 
     if expected_algorithm.present?
       expect(algorithm).to eq expected_algorithm
     else
-      expect(algorithm).to satisfy { |v| %w[ed25519 rsa-pss-sha256 rsa-sha256].include?(v) }
+      expect(algorithm).to satisfy { |v| %w[ed25519 rsa-pss-sha256 rsa-sha256 ecdsa-p256].include?(v) }
     end
 
     expect(keyid).to eq account.id
@@ -1000,6 +1041,9 @@ Then /^the response should be a "([^\"]+)" certificate signed using "([^\"]+)"$/
   when /rsa-sha256/
     rsa = OpenSSL::PKey::RSA.new(account.public_key)
     ok  = rsa.verify(OpenSSL::Digest::SHA256.new, sig_bytes, signing_data) rescue false
+  when /ecdsa-p256/
+    ec = OpenSSL::PKey::EC.new(account.ecdsa_public_key)
+    ok = ec.verify(OpenSSL::Digest::SHA256.new, sig_bytes, signing_data) rescue false
   end
 
   expect(ok).to be true
@@ -1079,7 +1123,7 @@ Then /^the response should be a "([^\"]+)" certificate with the following encryp
   ciphertext,
   iv,
   tag         = enc.split('.')
-                   .map { Base64.strict_decode64(_1) }
+                   .map { Base64.strict_decode64(it) }
 
   aes.key = key
   aes.iv  = iv
@@ -1155,6 +1199,9 @@ Then /^the response body should be a "([^\"]+)" with a certificate signed using 
   when /rsa-sha256/
     rsa = OpenSSL::PKey::RSA.new(account.public_key)
     ok  = rsa.verify(OpenSSL::Digest::SHA256.new, sig_bytes, signing_data) rescue false
+  when /ecdsa-p256/
+    ec = OpenSSL::PKey::EC.new(account.ecdsa_public_key)
+    ok = ec.verify(OpenSSL::Digest::SHA256.new, sig_bytes, signing_data) rescue false
   end
 
   expect(ok).to be true
@@ -1260,7 +1307,7 @@ Then /^the response body should be a "([^\"]+)" with the following encrypted cer
   ciphertext,
   iv,
   tag         = enc.split('.')
-                   .map { Base64.strict_decode64(_1) }
+                   .map { Base64.strict_decode64(it) }
 
   aes.key = key
   aes.iv  = iv
@@ -1370,6 +1417,6 @@ Given /^the JSON data should be sorted by "([^\"]+)"$/ do |key|
   data = JSON.parse(last_response.body)
              .fetch('data')
 
-  expect(data).to eq data.sort_by { _1.dig(*key.split('.')) }
+  expect(data).to eq data.sort_by { it.dig(*key.split('.')) }
                          .reverse
 end

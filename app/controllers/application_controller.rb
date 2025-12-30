@@ -90,7 +90,7 @@ class ApplicationController < ActionController::API
   def authorization_context = build_authorization_context
 
   def render_meta(meta)
-    render json: { meta: meta.deep_transform_keys { _1.to_s.camelize :lower } }
+    render json: { meta: meta.deep_transform_keys { it.to_s.camelize :lower } }
   end
 
   def render_no_content(**kwargs)
@@ -417,7 +417,7 @@ class ApplicationController < ActionController::API
     end
 
     # Special cases where a certain limit has been met on the free tier
-    status = if errors.any? { _1.code == 'ACCOUNT_ALU_LIMIT_EXCEEDED' }
+    status = if errors.any? { it.code == 'ACCOUNT_ALU_LIMIT_EXCEEDED' }
                :payment_required
              else
                :unprocessable_entity
@@ -528,7 +528,7 @@ class ApplicationController < ActionController::API
   rescue ActiveRecord::StatementInvalid => e
     # Bad encodings, Invalid UUIDs, non-base64'd creds, etc.
     case e.cause
-    in PG::InvalidTextRepresentation | PG::CharacterNotInRepertoire
+    in PG::InvalidTextRepresentation | PG::CharacterNotInRepertoire | PG::UntranslatableCharacter
       render_bad_request detail: 'The request could not be completed because it contains an invalid byte sequence (check encoding)', code: 'ENCODING_INVALID'
     in PG::Error if e.message in /incomplete multibyte character/ | /invalid multibyte character/
       render_bad_request detail: 'The request could not be completed because it contains an invalid byte sequence (check encoding)', code: 'ENCODING_INVALID'
@@ -591,10 +591,10 @@ class ApplicationController < ActionController::API
             Keygen.logger.warn { "[action_policy] policy=#{policy} symbol=#{symbol}" }
           end
         in [String, *]
-          rules.each { accum << _1 }
+          rules.each { accum << it }
         in [Hash, *]
           rules.each do |rule|
-            rule.values.each { accum << _1 }
+            rule.values.each { accum << it }
           end
         end
       end
@@ -629,7 +629,7 @@ class ApplicationController < ActionController::API
 
   def require_ee!(entitlements: [])
     return if
-      Keygen.ee? && Keygen.ee { _1.entitled?(*entitlements) }
+      Keygen.ee? && Keygen.ee { it.entitled?(*entitlements) }
 
     if entitlements.any?
       render_forbidden(detail: "must have an EE license with the following entitlements to access this resource: #{entitlements.join(', ')}")

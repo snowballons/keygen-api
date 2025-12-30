@@ -24,6 +24,7 @@ class Policy < ApplicationRecord
     RSA_2048_PKCS1_SIGN_V2
     RSA_2048_PKCS1_PSS_SIGN_V2
     ED25519_SIGN
+    ECDSA_P256_SIGN
   ].freeze
 
   MACHINE_UNIQUENESS_STRATEGIES = %w[
@@ -180,7 +181,7 @@ class Policy < ApplicationRecord
   validates :product,
     scope: { by: :account_id }
 
-  validates :name, presence: true
+  validates :name, presence: true, length: { maximum: 255 }
   validates :duration, numericality: { greater_than: 0, less_than_or_equal_to: 2_147_483_647 }, allow_nil: true, allow_blank: true
   validates :duration, numericality: { greater_than_or_equal_to: 1.day.to_i, message: "must be greater than or equal to 86400 (1 day)" }, allow_nil: true
   validates :heartbeat_duration, numericality: { greater_than: 0, less_than_or_equal_to: 2_147_483_647 }, allow_nil: true, allow_blank: true
@@ -189,12 +190,13 @@ class Policy < ApplicationRecord
   validates :max_machines, numericality: { greater_than_or_equal_to: 1, message: "must be greater than or equal to 1 for floating policy" }, allow_nil: true, if: :floating?
   validates :max_machines, numericality: { equal_to: 1, message: "must be equal to 1 for non-floating policy" }, allow_nil: true, if: :node_locked?
   validates :max_cores, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 2_147_483_647 }, allow_nil: true
+  validates :max_memory, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 9_223_372_036_854_775_807 }, allow_nil: true
+  validates :max_disk, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 9_223_372_036_854_775_807 }, allow_nil: true
   validates :max_uses, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 2_147_483_647 }, allow_nil: true, allow_blank: true
   validates :check_in_interval, inclusion: { in: %w[day week month year], message: "must be one of: day, week, month, year" }, if: :requires_check_in?
   validates :check_in_interval_count, inclusion: { in: 1..365, message: "must be a number between 1 and 365 inclusive" }, if: :requires_check_in?
-  validates :metadata, length: { maximum: 64, message: "too many keys (exceeded limit of 64 keys)" }
   validates :scheme, inclusion: { in: %w[LEGACY_ENCRYPT], message: "unsupported encryption scheme (scheme must be LEGACY_ENCRYPT for legacy encrypted policies)" }, if: :encrypted?
-  validates :scheme, inclusion: { in: CRYPTO_SCHEMES, message: "unsupported encryption scheme" }, if: :scheme?
+  validates :scheme, inclusion: { in: CRYPTO_SCHEMES, message: "unsupported signing scheme" }, if: :scheme?
   validates :machine_uniqueness_strategy, inclusion: { in: MACHINE_UNIQUENESS_STRATEGIES, message: "unsupported machine uniqueness strategy" }, allow_nil: true
   validates :machine_matching_strategy, inclusion: { in: MACHINE_MATCHING_STRATEGIES, message: "unsupported machine matching strategy" }, allow_nil: true
   validates :component_uniqueness_strategy, inclusion: { in: COMPONENT_UNIQUENESS_STRATEGIES, message: "unsupported component uniqueness strategy" }, allow_nil: true
@@ -202,6 +204,14 @@ class Policy < ApplicationRecord
   validates :expiration_strategy, inclusion: { in: EXPIRATION_STRATEGIES, message: "unsupported expiration strategy" }, allow_nil: true
   validates :expiration_basis, inclusion: { in: EXPIRATION_BASES, message: "unsupported expiration basis" }, allow_nil: true
   validates :renewal_basis, inclusion: { in: RENEWAL_BASES, message: "unsupported renewal basis" }, allow_nil: true
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
+
   validates :authentication_strategy,
     inclusion: { in: AUTHENTICATION_STRATEGIES, message: "unsupported authentication strategy" },
     allow_nil: true
@@ -254,6 +264,12 @@ class Policy < ApplicationRecord
   validates :overage_strategy, exclusion: { in: %w[ALLOW_1_25X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_25X_OVERAGE with a max cores value not divisible by 4)' },
     if: -> { max_cores.to_i % 4 > 0 }
 
+  validates :overage_strategy, exclusion: { in: %w[ALLOW_1_25X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_25X_OVERAGE with a max memory value not divisible by 4)' },
+    if: -> { max_memory.to_i % 4 > 0 }
+
+  validates :overage_strategy, exclusion: { in: %w[ALLOW_1_25X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_25X_OVERAGE with a max disk value not divisible by 4)' },
+    if: -> { max_disk.to_i % 4 > 0 }
+
   validates :overage_strategy, exclusion: { in: %w[ALLOW_1_25X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_25X_OVERAGE with a max processes value not divisible by 4)' },
     if: -> { max_processes.to_i % 4 > 0 }
 
@@ -268,6 +284,12 @@ class Policy < ApplicationRecord
 
   validates :overage_strategy, exclusion: { in: %w[ALLOW_1_5X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_5X_OVERAGE with a max cores value not divisible by 2)' },
     if: -> { max_cores.to_i % 2 > 0 }
+
+  validates :overage_strategy, exclusion: { in: %w[ALLOW_1_5X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_5X_OVERAGE with a max memory value not divisible by 2)' },
+    if: -> { max_memory.to_i % 2 > 0 }
+
+  validates :overage_strategy, exclusion: { in: %w[ALLOW_1_5X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_5X_OVERAGE with a max disk value not divisible by 2)' },
+    if: -> { max_disk.to_i % 2 > 0 }
 
   validates :overage_strategy, exclusion: { in: %w[ALLOW_1_5X_OVERAGE], message: 'incompatible overage strategy (cannot use ALLOW_1_5X_OVERAGE with a max processes value not divisible by 2)' },
     if: -> { max_processes.to_i % 2 > 0 }

@@ -109,7 +109,16 @@ class RequestLogSerializer < BaseSerializer
 
     if @object.resource_id.present? && @object.resource_type.present?
       link :related do
-        @url_helpers.polymorphic_path [:v1, @object.account, @object.resource]
+        next unless @object.resource.present? # handle when resource no longer exists
+
+        case @object.resource
+        in Billing | Plan # special case singular routes
+          @url_helpers.polymorphic_path [:v1, @object.account, @object.resource_type.underscore.to_sym]
+        in Accountable
+          @url_helpers.polymorphic_path [:v1, @object.account, @object.resource]
+        else
+          @url_helpers.polymorphic_path [:v1, @object.resource]
+        end
       end
     end
   end

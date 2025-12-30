@@ -84,7 +84,7 @@ module OciImageLayout
         digest_io.rewind
 
         digest = "sha256:#{digest_io.hexdigest}"
-        path   = entry.name
+        path   = entry.name.delete_prefix('./')
 
         @entries[path] = @entries[digest] = digest_io
         @digests[path] = @digests[digest] = digest
@@ -229,7 +229,7 @@ module OciImageLayout
     def each(&)
       super
 
-      manifests.each { _1.each(&) }
+      manifests.each { it.each(&) }
     end
   end
 
@@ -292,7 +292,7 @@ module OciImageLayout
     def each(&)
       super
 
-      layers.each { _1.each(&) }
+      layers.each { it.each(&) }
       config&.each(&)
     end
   end

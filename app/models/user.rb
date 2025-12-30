@@ -60,7 +60,7 @@ class User < ApplicationRecord
     union_of: %i[owned_licenses user_licenses],
     class_name: License.name
 
-  has_secure_password :password, validations: false
+  has_secure_password :password, validations: false, reset_token: false
   has_environment
   has_account inverse_of: :users
   has_default_role :user
@@ -134,7 +134,15 @@ class User < ApplicationRecord
 
   validates :email, email: true, presence: true, length: { maximum: 255 }, uniqueness: { case_sensitive: false, scope: :account_id }
   validates :password, length: { minimum: 6, maximum: 72.bytes }, allow_nil: true
-  validates :metadata, length: { maximum: 64, message: "too many keys (exceeded limit of 64 keys)" }
+  validates :first_name, length: { maximum: 255 }
+  validates :last_name, length: { maximum: 255 }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
 
   validate on: :create, if: -> { id_before_type_cast.present? } do
     errors.add :id, :invalid, message: 'must be a valid UUID' if

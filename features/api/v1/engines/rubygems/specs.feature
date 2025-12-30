@@ -120,7 +120,7 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "foo".freeze
-        s.licenses = [["MIT".freeze]]
+        s.licenses = ["MIT".freeze]
         s.required_ruby_version = Gem::Requirement.new(">= 3.1".freeze)
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
@@ -142,7 +142,7 @@ Feature: Rubygems legacy specs index
     And I use an authentication token
     And I send the following raw headers:
       """
-      If-None-Match: W/"7881fff6707156380bdc9236e286cf83"
+      If-None-Match: W/"b219f4baa147e58e757bad963d553b88"
       """
     When I send a GET request to "/accounts/test1/engines/rubygems/quick/Marshal.4.8/foo-1.0.0.gemspec.rz"
     Then the response status should be "304"
@@ -158,8 +158,8 @@ Feature: Rubygems legacy specs index
     Then the response status should be "200"
     And the response should contain the following raw headers:
       """
-      Etag: W/"7881fff6707156380bdc9236e286cf83"
-      Cache-Control: max-age=86400, private, no-transform
+      Etag: W/"b219f4baa147e58e757bad963d553b88"
+      Cache-Control: max-age=600, private, no-transform
       """
     And the response body should be a gemspec with the following content:
       """
@@ -174,7 +174,7 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "foo".freeze
-        s.licenses = [["MIT".freeze]]
+        s.licenses = ["MIT".freeze]
         s.required_ruby_version = Gem::Requirement.new(">= 3.1".freeze)
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
@@ -219,7 +219,7 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "foo".freeze
-        s.licenses = [["MIT".freeze]]
+        s.licenses = ["MIT".freeze]
         s.required_ruby_version = Gem::Requirement.new(">= 3.1".freeze)
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
@@ -269,7 +269,7 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "foo".freeze
-        s.licenses = [["MIT".freeze]]
+        s.licenses = ["MIT".freeze]
         s.required_ruby_version = Gem::Requirement.new(">= 3.1".freeze)
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
@@ -324,7 +324,6 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "baz".freeze
-        s.licenses = [[]]
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
 
@@ -362,7 +361,7 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "foo".freeze
-        s.licenses = [["MIT".freeze]]
+        s.licenses = ["MIT".freeze]
         s.required_ruby_version = Gem::Requirement.new(">= 3.1".freeze)
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
@@ -408,7 +407,7 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "foo".freeze
-        s.licenses = [["MIT".freeze]]
+        s.licenses = ["MIT".freeze]
         s.required_ruby_version = Gem::Requirement.new(">= 3.1".freeze)
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
@@ -455,7 +454,6 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "baz".freeze
-        s.licenses = [[]]
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
 
@@ -493,7 +491,6 @@ Feature: Rubygems legacy specs index
         s.require_paths = ["lib".freeze]
         s.date = "2024-10-22"
         s.description = "baz".freeze
-        s.licenses = [[]]
         s.rubygems_version = "3.5.11".freeze
         s.summary = nil
 
@@ -565,7 +562,7 @@ Feature: Rubygems legacy specs index
     And the response should contain the following raw headers:
       """
       Etag: W/"697c5c065808ab67076f865ec7d72853"
-      Cache-Control: max-age=86400, private, no-transform
+      Cache-Control: max-age=600, private, no-transform
       """
     And the response body should be gemspecs with the following content:
       """
@@ -783,7 +780,7 @@ Feature: Rubygems legacy specs index
     And the response should contain the following raw headers:
       """
       Etag: W/"bb875b8be35a27c3ad8692476c094c79"
-      Cache-Control: max-age=86400, private, no-transform
+      Cache-Control: max-age=600, private, no-transform
       """
     And the response body should be gemspecs with the following content:
       """
@@ -1001,7 +998,7 @@ Feature: Rubygems legacy specs index
     And the response should contain the following raw headers:
       """
       Etag: W/"7e47b8d18320b47af2f1a03d2f75983b"
-      Cache-Control: max-age=86400, private, no-transform
+      Cache-Control: max-age=600, private, no-transform
       """
     And the response body should be gemspecs with the following content:
       """

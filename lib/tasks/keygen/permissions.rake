@@ -12,14 +12,14 @@ namespace :keygen do
       # Split args up into ID and permission buckets.
       new_permissions,
       record_ids =
-        args.extras.flatten.partition { Permission::ALL_PERMISSIONS.include?(_1) }
+        args.extras.flatten.partition { Permission::ALL_PERMISSIONS.include?(it) }
 
       records = model.includes(:account, role: { role_permissions: :permission })
                      .where(id: record_ids)
 
       records.find_each(batch_size:) do |record|
         # Use preloaded permissions to save on superfluous queries.
-        prev_permissions = record.role_permissions.map { _1.permission.action }
+        prev_permissions = record.role_permissions.map { it.permission.action }
 
         # We only want to add new permissions to records that have the default
         # permission set, i.e. not to records with a custom permission set.
@@ -64,7 +64,7 @@ namespace :keygen do
 
         Keygen.logger.info { "Adding #{permissions.join(',')} permissions to #{admins.count} admins..." }
 
-        admins.in_batches(of: batch_size).each do |batch|
+        admins.unordered.in_batches(of: batch_size).each do |batch|
           task.invoke(User.name, *batch.ids, *permissions)
 
           # FIXME(ezekg) By default, tasks can only be invoked once. So we
@@ -90,7 +90,7 @@ namespace :keygen do
 
         Keygen.logger.info { "Adding #{permissions.join(',')} permissions to #{environments.count} environments..." }
 
-        environments.in_batches(of: batch_size).each do |batch|
+        environments.unordered.in_batches(of: batch_size).each do |batch|
           task.invoke(Environment.name, *batch.ids, *permissions)
           task.reenable
         end
@@ -111,7 +111,7 @@ namespace :keygen do
 
         Keygen.logger.info { "Adding #{permissions.join(',')} permissions to #{products.count} products..." }
 
-        products.in_batches(of: batch_size).each do |batch|
+        products.unordered.in_batches(of: batch_size).each do |batch|
           task.invoke(Product.name, *batch.ids, *permissions)
           task.reenable
         end
@@ -132,7 +132,7 @@ namespace :keygen do
 
         Keygen.logger.info { "Adding #{permissions.join(',')} permissions to #{licenses.count} licenses..." }
 
-        licenses.in_batches(of: batch_size).each do |batch|
+        licenses.unordered.in_batches(of: batch_size).each do |batch|
           task.invoke(License.name, *batch.ids, *permissions)
           task.reenable
         end
@@ -153,7 +153,7 @@ namespace :keygen do
 
         Keygen.logger.info { "Adding #{permissions.join(',')} permissions to #{users.count} users..." }
 
-        users.in_batches(of: batch_size).each do |batch|
+        users.unordered.in_batches(of: batch_size).each do |batch|
           task.invoke(User.name, *batch.ids, *permissions)
           task.reenable
         end

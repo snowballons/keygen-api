@@ -55,6 +55,7 @@ RSpec.configure do |config|
   config.include EnvHelper
   config.include KeygenHelper
   config.include TaskHelper
+  config.include MutexHelper
 
   # # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   # config.fixture_path = "#{::Rails.root}/spec/fixtures"
@@ -174,6 +175,15 @@ RSpec.configure do |config|
     end
   end
 
+  # disable implicit transaction for cleaning up after tests (mainly to facilitate threading)
+  config.around :each, :skip_transaction_cleaner do |example|
+    DatabaseCleaner.strategy = [:deletion, except: %w[event_types permissions]]
+
+    example.run
+  ensure
+    DatabaseCleaner.strategy = :transaction
+  end
+
   # ignore false positives e.g. to_not raise_error SomeError
   config.around :each, :ignore_potential_false_positives do |example|
     on_potential_false_positives_was, econfig.on_potential_false_positives = econfig.on_potential_false_positives, :nothing
@@ -195,10 +205,14 @@ RSpec.configure do |config|
     Keygen::EE::License.reset!
   end
 
-  # Load rake tasks
-  config.before type: :task do
-    require 'rake'
+  # Load rake tasks once
+  mu = MutexHelper::Once.new
 
-    Rails.application.load_tasks
+  config.before type: :task do
+    mu.synchronize do
+      require 'rake'
+
+      Rails.application.load_tasks
+    end
   end
 end

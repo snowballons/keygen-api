@@ -22,7 +22,7 @@ Given /^the following "([^\"]*)"(?: rows)? exist:$/ do |resource, rows|
     when :release
       codes = hash.delete(:entitlements)&.split(/,\s*/)
       if codes.present? && codes.any?
-        entitlements = codes.map {{ entitlement: Entitlement.find_by!(code: _1) }}
+        entitlements = codes.map {{ entitlement: Entitlement.find_by!(code: it) }}
 
         hash[:constraints_attributes] = entitlements
       end
@@ -159,14 +159,33 @@ Given /^the current account has the following attributes:$/ do |body|
   @account.update!(attributes)
 end
 
-Given /^the current account has SSO configured for "([^\"]*)"$/ do |domain|
-  allow(WorkOS::SSO).to receive(:authorization_url).and_wrap_original do |*, domain_hint:, login_hint:, **|
-    "https://api.workos.test/sso/authorize?domain_hint=#{domain_hint}&login_hint=#{login_hint}"
+Given /^the current account has SSO (?:configured|stubbed) for "([^\"]*)"$/ do |domain|
+  allow(WorkOS::SSO).to receive(:authorization_url).and_wrap_original do |*, domain_hint:, login_hint:, state:, **|
+    dec = Keygen::EE::SSO.decrypt_state(state, secret_key: @account.secret_key)
+    enc = Base64.urlsafe_encode64(dec.to_json, padding: false)
+
+    "https://api.workos.test/sso/authorize?domain_hint=#{domain_hint}&login_hint=#{login_hint}&state=#{enc}"
   end
 
   @account.update!(
-    sso_organization_id: "test_org_#{SecureRandom.hex}",
-    sso_organization_domains: [domain],
+    sso_organization_id: @account.sso_organization_id.presence || "test_org_#{SecureRandom.hex}",
+    sso_organization_domains: @account.sso_organization_domains.presence || [domain],
+  )
+end
+
+Given /^the account "([^\"]*)" has SSO (?:configured|stubbed) for "([^\"]*)"$/ do |id, domain|
+  account = FindByAliasService.call(Account, id:, aliases: :slug)
+
+  allow(WorkOS::SSO).to receive(:authorization_url).and_wrap_original do |*, domain_hint:, login_hint:, state:, **|
+    dec = Keygen::EE::SSO.decrypt_state(state, secret_key: account.secret_key)
+    enc = Base64.urlsafe_encode64(dec.to_json, padding: false)
+
+    "https://api.workos.test/sso/authorize?domain_hint=#{domain_hint}&login_hint=#{login_hint}&state=#{enc}"
+  end
+
+  account.update!(
+    sso_organization_id: account.sso_organization_id.presence || "test_org_#{SecureRandom.hex}",
+    sso_organization_domains: account.sso_organization_domains.presence || [domain],
   )
 end
 
@@ -469,6 +488,8 @@ Given /^the current account has (\d+) "([^\"]*)" using "([^\"]*)"$/ do |count, r
       @crypt << create(resource.singularize.underscore, :rsa_2048_pkcs1_pss_sign_v2, account: @account, key: SecureRandom.hex)
     when 'ED25519_SIGN'
       @crypt << create(resource.singularize.underscore, :ed25519_sign, account: @account, key: SecureRandom.hex)
+    when 'ECDSA_P256_SIGN'
+      @crypt << create(resource.singularize.underscore, :ecdsa_p256_sign, account: @account, key: SecureRandom.hex)
     end
   end
 end
@@ -527,8 +548,8 @@ Given /^(?:all|the) "([^\"]*)" have the following attributes:$/ do |resource, bo
     end
 
   resources.each {
-    _1.assign_attributes(attrs)
-    _1.save!(validate: false)
+    it.assign_attributes(attrs)
+    it.save!(validate: false)
   }
 end
 
@@ -540,8 +561,8 @@ Given /^the first (\d+) "([^\"]*)" have the following attributes:$/ do |count, r
                       .first(count)
 
   resources.each {
-    _1.assign_attributes(attrs)
-    _1.save!(validate: false)
+    it.assign_attributes(attrs)
+    it.save!(validate: false)
   }
 end
 
@@ -553,8 +574,8 @@ Given /^the last (\d+) "([^\"]*)" have the following attributes:$/ do |count, re
                       .last(count)
 
   resources.each {
-    _1.assign_attributes(attrs)
-    _1.save!(validate: false)
+    it.assign_attributes(attrs)
+    it.save!(validate: false)
   }
 end
 
@@ -565,8 +586,8 @@ Given /^(\d+) "([^\"]*)" (?:have|has) the following attributes:$/ do |count, res
   resources = @account.send(resource.pluralize.underscore).limit(count)
 
   resources.each {
-    _1.assign_attributes(attrs)
-    _1.save!(validate: false)
+    it.assign_attributes(attrs)
+    it.save!(validate: false)
   }
 end
 
@@ -598,8 +619,8 @@ Given /^(?:the )?"([^\"]*)" (\d+)(?:\.\.(\.)?)(\d+) (?:have|has) the following a
           end
 
   slice.each {
-    _1.assign_attributes(attrs)
-    _1.save!(validate: false)
+    it.assign_attributes(attrs)
+    it.save!(validate: false)
   }
 end
 
@@ -1020,6 +1041,44 @@ Then /^the (first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|last) "li
   expect(model.machines_core_count).to eq model.machines.sum(:cores)
 end
 
+Then /^the (first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|last) "license" should have a correct machine memory count$/ do |word_index|
+  numbers = {
+    "first"   => 0,
+    "second"  => 1,
+    "third"   => 2,
+    "fourth"  => 3,
+    "fifth"   => 4,
+    "sixth"   => 5,
+    "seventh" => 6,
+    "eighth"  => 7,
+    "ninth"   => 8,
+    "last"    => -1,
+  }
+  index = numbers[word_index]
+  model = @account.licenses.all[index]
+
+  expect(model.machines_memory_count).to eq model.machines.sum(:memory)
+end
+
+Then /^the (first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|last) "license" should have a correct machine disk count$/ do |word_index|
+  numbers = {
+    "first"   => 0,
+    "second"  => 1,
+    "third"   => 2,
+    "fourth"  => 3,
+    "fifth"   => 4,
+    "sixth"   => 5,
+    "seventh" => 6,
+    "eighth"  => 7,
+    "ninth"   => 8,
+    "last"    => -1,
+  }
+  index = numbers[word_index]
+  model = @account.licenses.all[index]
+
+  expect(model.machines_disk_count).to eq model.machines.sum(:disk)
+end
+
 Then /^the (first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|last) "license" should have an? (\w+) within seconds of "([^\"]+)"$/ do |index_in_words, attr_name, value|
   value = parse_placeholders(value, account: @account, bearer: @bearer, crypt: @crypt)
 
@@ -1187,7 +1246,7 @@ end
 Then /^the (first|second|third|fourth|fifth|last) "([^\"]*)" should have the following relationships:$/ do |word_index, resource, body|
   body = parse_placeholders(body, account: @account, bearer: @bearer, crypt: @crypt)
   json = JSON.parse(last_response.body)
-  data = json['data'].select { _1['type'] == resource.pluralize }
+  data = json['data'].select { it['type'] == resource.pluralize }
                      .send(word_index)
 
   expect(data['relationships']).to include JSON.parse(body)
@@ -1196,7 +1255,7 @@ end
 Then /^the (first|second|third|fourth|fifth|last) "([^\"]*)" should have the following data:$/ do |word_index, resource, body|
   body = parse_placeholders(body, account: @account, bearer: @bearer, crypt: @crypt)
   json = JSON.parse(last_response.body)
-  data = json['data'].select { _1['type'] == resource.pluralize }
+  data = json['data'].select { it['type'] == resource.pluralize }
                      .send(word_index)
 
   expect(data).to include JSON.parse(body)

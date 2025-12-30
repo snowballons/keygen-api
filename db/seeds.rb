@@ -181,6 +181,9 @@ events = %w[
 
   account.billing.updated
   account.plan.updated
+  account.settings.created
+  account.settings.deleted
+  account.settings.updated
   account.subscription.canceled
   account.subscription.paused
   account.subscription.renewed
@@ -310,13 +313,13 @@ events = %w[
 ]
 
 Permission.upsert_all(
-  permissions.map {{ action: _1 }},
+  permissions.map {{ action: it }},
   record_timestamps: true,
   on_duplicate: :skip,
 )
 
 EventType.upsert_all(
-  events.map {{ event: _1 }},
+  events.map {{ event: it }},
   record_timestamps: true,
   on_duplicate: :skip,
 )

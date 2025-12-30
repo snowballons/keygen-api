@@ -48,11 +48,12 @@ module Keygen
     def worker?    = sidekiq?
     def task?(...) = rake?(...)
 
-    def multiplayer?(strict: true) = ENV['KEYGEN_MODE'] == 'multiplayer' && (!strict || !!ee { _1.entitled?(:multiplayer) })
+    def multiplayer?(strict: true) = ENV['KEYGEN_MODE'] == 'multiplayer' && (!strict || !!ee { it.entitled?(:multiplayer) })
     def singleplayer?(...)         = !multiplayer?(...)
 
-    def ee? = ENV['KEYGEN_EDITION'] == 'EE'
-    def ce? = !ee?
+    def ee?    = ENV['KEYGEN_EDITION'] == 'EE'
+    def ce?    = !ee?
+    def cloud? = ee? && multiplayer? && ENV['KEYGEN_HOST'] == 'api.keygen.sh'
 
     def mode    = multiplayer? ? 'multiplayer' : 'singleplayer'
     def edition = ee? ? 'EE' : 'CE'
@@ -80,7 +81,7 @@ module Keygen
 
     def rake?(*tasks)
       Rake.respond_to?(:application) && Rake.application.top_level_tasks.any? { |task|
-        tasks.all? { task.starts_with?(_1) }
+        tasks.all? { task.starts_with?(it) }
       }
     end
   end

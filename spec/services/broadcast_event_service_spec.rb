@@ -249,6 +249,21 @@ describe BroadcastEventService do
     expect(endpoint.subscriptions).to be_empty
   end
 
+  it 'should disable endpoint when status is 530 Frozen' do
+    allow(WebhookWorker::Request).to receive(:post) {
+      OpenStruct.new(code: 530, body: '530 Frozen')
+    }
+
+    event = nil
+    expect { event = create_webhook_event!(account, resource) }.to_not raise_error
+    expect(event).to_not be_nil
+    expect(event.last_response_body).to eq '530 Frozen'
+    expect(event.last_response_code).to eq 530
+
+    expect { endpoint.reload }.to_not raise_error
+    expect(endpoint.subscriptions).to be_empty
+  end
+
   context 'when endpoint has an environment' do
     before do
       create_list(:webhook_endpoint, 5, :in_isolated_environment, account:)
@@ -480,6 +495,50 @@ describe BroadcastEventService do
           uri: "#{uri.path}?#{uri.query}",
           body: body,
           signature_algorithm: 'rsa-sha256',
+          signature_header: headers['Keygen-Signature'],
+          digest_header: headers['Digest'],
+          date_header: headers['Date'],
+        )
+
+        expect(ok).to eq true
+
+        OpenStruct.new(code: 200, body: '')
+      }
+
+      create_webhook_event!(account, resource)
+    end
+  end
+
+  context 'when signature algorithm is ecdsa-p256' do
+    let(:endpoint) { create(:webhook_endpoint, url: "https://keygen.example/hooks?token=#{SecureRandom.hex}", signature_algorithm: 'ecdsa-p256', account: account) }
+
+    it 'should have a valid legacy signature header' do
+      allow(WebhookWorker::Request).to receive(:post) { |url, options|
+        headers = options.fetch(:headers)
+        body = options.fetch(:body)
+
+        ok = SignatureHelper.verify_legacy(account: account, signature: headers['X-Signature'], body: body)
+        expect(ok).to eq true
+
+        OpenStruct.new(code: 200, body: '')
+      }
+
+      create_webhook_event!(account, resource)
+    end
+
+    it 'should have a valid signature header' do
+      allow(WebhookWorker::Request).to receive(:post) { |url, options|
+        headers = options.fetch(:headers)
+        body    = options.fetch(:body)
+        uri     = URI.parse(endpoint.url)
+
+        ok = SignatureHelper.verify(
+          account: account,
+          method: 'POST',
+          host: uri.host,
+          uri: "#{uri.path}?#{uri.query}",
+          body: body,
+          signature_algorithm: 'ecdsa-p256',
           signature_header: headers['Keygen-Signature'],
           digest_header: headers['Digest'],
           date_header: headers['Date'],

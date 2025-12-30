@@ -45,7 +45,7 @@ class Role < ApplicationRecord
     allow_nil: true,
     to: :resource
 
-  accepts_nested_attributes_for :role_permissions, reject_if: :reject_associated_records_for_role_permissions
+  accepts_nested_attributes_for :role_permissions
   tracks_nested_attributes_for :role_permissions
 
   # Set default permissions unless already set
@@ -100,7 +100,7 @@ class Role < ApplicationRecord
     assign_attributes(
       role_permissions_attributes: ids.flatten
                                       .compact
-                                      .map {{ permission_id: _1 }},
+                                      .map {{ permission_id: it }},
     )
   end
 
@@ -121,7 +121,7 @@ class Role < ApplicationRecord
       role_permissions_attributes_assigned?
 
     Permission.where(
-      id: role_permissions_attributes.collect { _1[:permission_id] },
+      id: role_permissions_attributes.collect { it[:permission_id] },
     )
   end
 
@@ -130,7 +130,7 @@ class Role < ApplicationRecord
   # including pending changes.
   def permission_ids
     if role_permissions_attributes_assigned?
-      role_permissions_attributes.collect { _1[:permission_id] }
+      role_permissions_attributes.collect { it[:permission_id] }
     else
       role_permissions.collect(&:permission_id)
     end
@@ -222,19 +222,7 @@ class Role < ApplicationRecord
 
   def set_default_permissions
     assign_attributes(
-      role_permissions_attributes: default_permission_ids.map {{ permission_id: _1 }},
-    )
-  end
-
-  ##
-  # reject_associated_records_for_role_permissions rejects duplicate role permissions.
-  def reject_associated_records_for_role_permissions(attrs)
-    return if
-      new_record?
-
-    role_permissions.exists?(
-      # Make sure we only select real columns, not e.g. _destroy.
-      attrs.slice(attributes.keys),
+      role_permissions_attributes: default_permission_ids.map {{ permission_id: it }},
     )
   end
 
@@ -253,7 +241,7 @@ class Role < ApplicationRecord
         #              some reason role_id ends up being nil. Instead, we'll use the
         #              class method and then call reload.
         RolePermission.upsert_all(
-          role_permissions_attributes.map { _1.merge(role_id: id) },
+          role_permissions_attributes.map { it.merge(role_id: id) },
           record_timestamps: true,
           on_duplicate: :skip,
         )

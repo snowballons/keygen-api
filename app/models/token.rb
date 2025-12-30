@@ -45,7 +45,7 @@ class Token < ApplicationRecord
     # Default to wildcard permission but allow all
     default: %w[*]
 
-  accepts_nested_attributes_for :token_permissions, reject_if: :reject_associated_records_for_token_permissions
+  accepts_nested_attributes_for :token_permissions
   tracks_nested_attributes_for :token_permissions
 
   tracks_attributes :expiry
@@ -87,6 +87,9 @@ class Token < ApplicationRecord
   validates :max_deactivations, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true, allow_blank: true, if: :activation_token?
   validates :activations, numericality: { greater_than_or_equal_to: 0 }, if: :activation_token?
   validates :deactivations, numericality: { greater_than_or_equal_to: 0 }, if: :activation_token?
+
+  validates :name,
+    length: { maximum: 255 }
 
   validate on: :update, if: :activation_token? do |token|
     next if token&.activations.nil? || token.max_activations.nil?
@@ -203,7 +206,7 @@ class Token < ApplicationRecord
     end
 
     assign_attributes(
-      token_permissions_attributes: permission_ids.map {{ permission_id: _1 }},
+      token_permissions_attributes: permission_ids.map {{ permission_id: it }},
     )
   end
 
@@ -232,13 +235,13 @@ class Token < ApplicationRecord
       token_permissions_attributes_assigned?
 
     Permission.where(
-      id: token_permissions_attributes.collect { _1[:permission_id] },
+      id: token_permissions_attributes.collect { it[:permission_id] },
     )
   end
 
   def permission_ids
     if token_permissions_attributes_assigned?
-      token_permissions_attributes.collect { _1[:permission_id] }
+      token_permissions_attributes.collect { it[:permission_id] }
     else
       token_permissions.collect(&:permission_id)
     end
@@ -353,11 +356,12 @@ class Token < ApplicationRecord
     bearer.has_role? :user
   end
 
-  def activation_token?
+  def license_token?
     return false if orphaned_token?
 
     bearer.has_role? :license
   end
+  alias :activation_token? :license_token?
 
   def kind
     case
@@ -423,7 +427,7 @@ class Token < ApplicationRecord
 
   def set_default_permissions
     assign_attributes(
-      token_permissions_attributes: default_permission_ids.map {{ permission_id: _1 }},
+      token_permissions_attributes: default_permission_ids.map {{ permission_id: it }},
     )
   end
 
@@ -434,18 +438,6 @@ class Token < ApplicationRecord
                   else
                     nil
                   end
-  end
-
-  ##
-  # reject_associated_records_for_token_permissions rejects duplicate token permissions.
-  def reject_associated_records_for_token_permissions(attrs)
-    return if
-      new_record?
-
-    token_permissions.exists?(
-      # Make sure we only select real columns, not e.g. _destroy.
-      attrs.slice(attributes.keys),
-    )
   end
 
   ##
@@ -462,7 +454,7 @@ class Token < ApplicationRecord
       #              some reason token_id ends up being nil. Instead, we'll use the
       #              class method and then call reload.
       TokenPermission.upsert_all(
-        token_permissions_attributes.map { _1.merge(token_id: id) },
+        token_permissions_attributes.map { it.merge(token_id: id) },
         record_timestamps: true,
         on_duplicate: :skip,
       )

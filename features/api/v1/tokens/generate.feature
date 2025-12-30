@@ -515,6 +515,51 @@ Feature: Generate authentication token
     And sidekiq should have 1 "event-log" job
 
   @ee
+  Scenario: Global admin generates a token for an isolated environment via token authentication
+    Given the current account is "test1"
+    And the current account has 1 isolated "environment"
+    And I am an admin of account "test1"
+    And I use an authentication token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "tokens",
+          "attributes": {
+            "name": "Isolated Token"
+          },
+          "relationships": {
+            "environment": {
+              "data": { "type": "environments", "id": "$environments[0]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "token" with the following relationships:
+      """
+      {
+        "environment": {
+          "links": { "related": "/v1/accounts/$account/environments/$environments[0]" },
+          "data": { "type": "environments", "id": "$environments[0]" }
+        },
+        "bearer": {
+          "links": { "related": "/v1/accounts/$account/users/$users[0]" },
+          "data": { "type": "users", "id": "$users[0]" }
+        }
+      }
+      """
+    And the response should contain a valid signature header for "test1"
+    And the response should not contain the following headers:
+      """
+      { "Keygen-Environment": "isolated" }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 1 "event-log" job
+
+  @ee
   Scenario: Shared admin generates a token for an shared environment
     Given the current account is "test1"
     And the current account has 1 shared "environment"
@@ -1323,6 +1368,257 @@ Feature: Generate authentication token
     And sidekiq should have 3 "webhook" jobs
     And sidekiq should have 1 "metric" job
     And sidekiq should have 1 "request-log" job
+
+  Scenario: Admin generates a new token for an invalid product
+    Given the current account is "test1"
+    And I am an admin of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "product", "id": "2845d39b-050f-417a-8f06-a50f31c2b792" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for themselves
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens"
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for a product
+    Given the current account is "test1"
+    And the current account has 2 "products"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "product", "id": "$products[1]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for their license
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And the current account has 1 "policy" for the last "product"
+    And the current account has 1 "license" for the last "policy"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "licenses", "id": "$licenses[0]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "token" with the following relationships:
+      """
+      {
+        "bearer": {
+          "links": { "related": "/v1/accounts/$account/licenses/$licenses[0]" },
+          "data": { "type": "licenses", "id": "$licenses[0]" }
+        }
+      }
+      """
+    And the response body should be a "token" with the following attributes:
+      """
+      { "kind": "activation-token" }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 1 "event-log" job
+
+  Scenario: Product generates a new token for a license
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And the current account has 1 "license"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "licenses", "id": "$licenses[0]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for an admin
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And the current account has 1 "admin"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "users", "id": "$users[1]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for their user
+    Given the current account is "test1"
+    And the current account has 1 "user"
+    And the current account has 1 "license" for the last "user" as "owner"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "user", "id": "$users[1]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "201"
+    And the response body should be a "token" with the following relationships:
+      """
+      {
+        "bearer": {
+          "links": { "related": "/v1/accounts/$account/users/$users[1]" },
+          "data": { "type": "users", "id": "$users[1]" }
+        }
+      }
+      """
+    And the response body should be a "token" with the following attributes:
+      """
+      { "kind": "user-token" }
+      """
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 1 "event-log" job
+
+  Scenario: Product generates a new token for a user
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And the current account has 1 "user"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "user", "id": "$users[1]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for an invalid user
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And the current account has 1 "user"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "user", "id": "0ea6a022-5fa1-42f2-9bf0-b0a3c5bbcc24" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
+
+  Scenario: Product generates a new token for an environment
+    Given the current account is "test1"
+    And the current account has 1 "product"
+    And the current account has 1 "environment"
+    And I am a product of account "test1"
+    And I authenticate with a token
+    When I send a POST request to "/accounts/test1/tokens" with the following:
+      """
+      {
+        "data": {
+          "type": "token",
+          "relationships": {
+            "bearer": {
+              "data": { "type": "environment", "id": "$environments[0]" }
+            }
+          }
+        }
+      }
+      """
+    Then the response status should be "403"
+    And sidekiq should have 0 "webhook" jobs
+    And sidekiq should have 1 "request-log" job
+    And sidekiq should have 0 "event-log" jobs
 
   Scenario: User generates a new token via basic authentication
     Given the current account is "test1"
@@ -2237,7 +2533,7 @@ Feature: Generate authentication token
           "header": "Authorization"
         },
         "links": {
-          "redirect": "https://api.workos.test/sso/authorize?domain_hint=keygen.example&login_hint=zeke@keygen.example"
+          "redirect": "https://api.workos.test/sso/authorize?domain_hint=keygen.example&login_hint=zeke@keygen.example&state=eyJlbWFpbCI6Inpla2VAa2V5Z2VuLmV4YW1wbGUiLCJlbnZpcm9ubWVudF9pZCI6bnVsbH0"
         }
       }
       """

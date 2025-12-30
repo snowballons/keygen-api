@@ -38,6 +38,16 @@ class ReleaseManifest < ApplicationRecord
     length: { minimum: MIN_CONTENT_LENGTH, maximum: MAX_CONTENT_LENGTH },
     presence: true
 
+  validates :content_path,
+    length: { maximum: 4.kilobytes }
+
+  validates :metadata,
+    json: {
+      maximum_bytesize: 16.kilobytes,
+      maximum_depth: 4,
+      maximum_keys: 64,
+    }
+
   # assert that release matches the artifact's release
   validate on: %i[create update] do
     next unless

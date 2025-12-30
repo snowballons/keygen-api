@@ -15,12 +15,17 @@ module Roleable
       errors.add :role, :not_allowed, message: 'role is missing' unless
         persisted?
 
+      # save a query in case role is unchanged
+      return if
+        name.to_s == role.name.to_s
+
       update!(role_attributes: { name: })
     end
 
     def change_role(name)
       change_role!(name)
-    rescue ActiveRecord::RecordInvalid
+    rescue ActiveRecord::RecordNotSaved,
+           ActiveRecord::RecordInvalid
       nil
     end
 
@@ -52,7 +57,7 @@ module Roleable
       return false if
         role.nil?
 
-      names.any? { _1.to_s == role.name.to_s }
+      names.any? { it.to_s == role.name.to_s }
     end
     alias_method :has_roles?, :has_role?
 
